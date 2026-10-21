@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Pay · Studio Manager</title>
+  <!--
+    UPI pay landing page. PDF "TAP TO PAY" buttons link here with https:// (which mobile PDF viewers
+    like Google Drive allow), and this page then launches the UPI app with upi://. It also shows a QR
+    and manual app buttons as a fallback for desktop or viewers that block the auto-launch.
+    Query params: pa=UPI id, pn=payee name, am=amount, tn=note (same as a upi://pay deep link).
+  -->
+  <style>
+    :root { --ink:#1d1b17; --muted:#8a8478; --gold:#b8913f; --goldD:#8c6a26; --cream:#fbf7ee; --line:#ece4d2; }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: var(--ink);
+      background: radial-gradient(1200px 600px at 50% -10%, #fff, var(--cream)); display: flex;
+      align-items: center; justify-content: center; padding: 20px; }
+    .card { width: 100%; max-width: 380px; background: #fff; border: 1px solid var(--line);
+      border-radius: 18px; box-shadow: 0 10px 40px rgba(140,106,38,.12); padding: 22px 20px 24px; text-align: center; }
+    .brand { font-size: 13px; letter-spacing: 1.5px; color: var(--goldD); font-weight: 700; text-transform: uppercase; }
+    h1 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 6px 0 2px; }
+    .amt { font-size: 34px; font-weight: 800; margin: 4px 0 2px; }
+    .to { font-size: 13px; color: var(--muted); margin-bottom: 14px; word-break: break-all; }
+    .qrwrap { display: inline-block; padding: 10px; background: #fff; border: 2px solid var(--gold); border-radius: 12px; }
+    #qr { width: 200px; height: 200px; display: block; }
+    .hint { font-size: 12px; color: var(--muted); margin: 10px 0 16px; }
+    .btn { display: block; width: 100%; padding: 14px; border: 0; border-radius: 12px; font-size: 15px;
+      font-weight: 700; color: #fff; background: var(--goldD); text-decoration: none; margin: 8px 0; cursor: pointer; }
+    .btn.secondary { background: #fff; color: var(--goldD); border: 1.5px solid var(--gold); font-weight: 600; }
+    .row { display: flex; gap: 8px; }
+    .row .btn { margin: 8px 0 0; }
+    .copy { font-size: 12px; color: var(--muted); margin-top: 14px; }
+    .copy b { color: var(--ink); }
+    .foot { font-size: 11px; color: var(--muted); margin-top: 16px; }
+    .err { color: #a53a2e; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="brand" id="brand">Studio Manager</div>
+    <h1>Amount to pay</h1>
+    <div class="amt" id="amt">₹0</div>
+    <div class="to" id="to"></div>
+
+    <div class="qrwrap"><img id="qr" alt="Scan to pay with any UPI app" /></div>
+    <div class="hint">Scan the QR with any UPI app, or tap a button below.</div>
+
+    <a class="btn" id="openUpi">Open UPI app to pay</a>
+    <div class="row">
+      <a class="btn secondary" id="gpay">GPay</a>
+      <a class="btn secondary" id="phonepe">PhonePe</a>
+      <a class="btn secondary" id="paytm">Paytm</a>
+    </div>
+
+    <div class="copy">UPI ID: <b id="upiId"></b></div>
+    <div class="foot">If nothing opens, scan the QR or pay to the UPI ID above.</div>
+  </div>
+
+  <!-- Tiny QR generator (no network needed), MIT licensed. -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var pa = q.get('pa') || '';
+      var pn = q.get('pn') || '';
+      var am = q.get('am') || '';
+      var tn = q.get('tn') || '';
+      var cu = q.get('cu') || 'INR';
+
+      function fmtAmt(a) {
+        var n = Number(a); if (!isFinite(n)) return a || '';
+        return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+      }
+      // Build a standard upi://pay deep link (spaces as %20, not +).
+      function upiLink(scheme) {
+        var p = new URLSearchParams({ pa: pa, pn: pn, am: am, cu: cu, tn: tn });
+        return scheme + '://pay?' + p.toString().replace(/\+/g, '%20');
+      }
+
+      document.getElementById('brand').textContent = pn || 'Studio Manager';
+      document.getElementById('amt').textContent = fmtAmt(am);
+      document.getElementById('to').textContent = pn ? ('Paying to ' + pn) : '';
+      document.getElementById('upiId').textContent = pa || '—';
+
+      var upi = upiLink('upi');
+      var card = document.getElementById('card');
+      if (!pa) {
+        card.innerHTML = '<div class="brand">Studio Manager</div><p class="err">This pay link is missing details. Please ask for a fresh invoice.</p>';
+        return;
+      }
+
+      // App-specific schemes (best effort — fall back to generic upi:// if the app isn't installed).
+      document.getElementById('openUpi').href = upi;
+      document.getElementById('gpay').href = upiLink('tez');       // Google Pay
+      document.getElementById('phonepe').href = upiLink('phonepe');
+      document.getElementById('paytm').href = upiLink('paytmmp');
+
+      // Render the QR (any UPI app can scan it).
+      try {
+        var qr = qrcode(0, 'M');
+        qr.addData(upi);
+        qr.make();
+        document.getElementById('qr').src = qr.createDataURL(6, 8);
+      } catch (e) { /* QR lib failed to load — manual buttons + UPI id still work */ }
+
+      // Auto-launch the UPI app on first load (works on phones; harmless on desktop).
+      // A short delay lets the page paint first, so the fallback UI is visible if the launch is blocked.
+      setTimeout(function () { try { location.href = upi; } catch (e) {} }, 400);
+    })();
+  </script>
+</body>
+</html>
